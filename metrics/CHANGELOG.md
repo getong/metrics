@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - ReleaseDate
 
+## [0.24.6] - 2026-05-13
+
 ### Added
 
 - Support for specifying `description` and `unit` as optional parameters in the `counter!`,

@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - ReleaseDate
 
+## [0.20.4] - 2026-05-13
+
 ### Fixed
 
 - Tightened the `metrics` dependency constraint to `^0.24.6` so that consumers of `metrics-util`

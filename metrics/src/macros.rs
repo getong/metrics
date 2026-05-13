@@ -56,109 +56,6 @@ macro_rules! key_var {
     }
 }
 
-/// Registers a counter.
-///
-/// Counters represent a single monotonic value, which means the value can only be incremented, not
-/// decremented, and always starts out with an initial value of zero.
-///
-/// Metrics can be registered, which provides a handle to directly update that metric.  For
-/// counters, [`Counter`](crate::Counter) is provided which can be incremented or set to an absolute value.
-///
-/// Metric names are shown below using string literals, but they can also be owned `String` values,
-/// which includes using macros such as `format!` directly at the callsite. String literals are
-/// preferred for performance where possible.
-///
-/// # Usage
-///
-/// `[opt: value,] <$name,> [$labels,]`
-///
-/// Only `$name` is required to initialize metrics.
-///
-/// All `opt`s MUST be specified before `$name` while `$labels` parameter block always go after `$name`
-///
-/// Following is brief explanation of parameters
-///
-/// ## Required parameters
-///
-/// - `$name` - Name of the metric. Must be a string literal or an expression that results in `String` or `&'static str`.
-///
-/// ## Optional Parameters
-///
-/// The following parameters can be provided in any order:
-///
-/// - `target:` - Module path of the counter. Defaults to `::core::module_path!()`.
-/// - `level:` - Verbosity level of the counter. Defaults to `INFO`.
-/// - `description:` - Description of the counter. If specified, `$name` will be used twice.
-/// - `unit:` - Unit of measurement of the counter. Description must be provided in order to specify units.
-///
-/// ## Labels
-///
-/// Labels can be passed as _one_ of following:
-/// - Arbitrary number of `<key> => <value>` where `key` and `value` can be a string literal or an expression that results in `String` or `&'static str`.
-/// - Static reference to collection of **Label**
-/// - Collection/iterator that implements [IntoLabels](trait.IntoLabels.html)
-///
-/// # Example
-/// ```
-/// # #![no_implicit_prelude]
-/// # use ::std::convert::From;
-/// # use ::std::format;
-/// # use ::std::string::String;
-/// # use metrics::counter;
-/// # fn main() {
-/// // A basic counter:
-/// let counter = counter!("some_metric_name");
-/// counter.increment(1);
-///
-/// // Specifying labels inline, including using constants for either the key or value:
-/// let counter = counter!("some_metric_name", "service" => "http");
-/// counter.absolute(42);
-///
-/// const SERVICE_LABEL: &'static str = "service";
-/// const SERVICE_HTTP: &'static str = "http";
-/// let counter = counter!("some_metric_name", SERVICE_LABEL => SERVICE_HTTP);
-/// counter.increment(123);
-///
-/// // We can also pass labels by giving a vector or slice of key/value pairs.  In this scenario,
-/// // a unit or description can still be passed in their respective positions:
-/// let dynamic_val = "woo";
-/// let labels = [("dynamic_key", format!("{}!", dynamic_val))];
-/// let counter = counter!("some_metric_name", &labels);
-///
-/// // As mentioned in the documentation, metric names also can be owned strings, including ones
-/// // generated at the callsite via things like `format!`:
-/// let name = String::from("some_owned_metric_name");
-/// let counter = counter!(name);
-///
-/// let counter = counter!(format!("{}_via_format", "name"));
-///
-/// // Full counter customization example
-/// let counter = counter!(
-///     description: "super counter",
-///     unit: metrics::Unit::Bytes,
-///     target: ::core::module_path!(),
-///     level: metrics::Level::INFO,
-///     "super_counter",
-///     "label1" => "value1",
-///     "label2" => "value2"
-/// );
-/// # }
-/// ```
-#[macro_export]
-macro_rules! counter {
-    ($($input:tt)*) => {
-        $crate::__register_metric!(
-            describe_counter,
-            register_counter,
-            description = __internal_metric_description_none__,
-            unit = __internal_metric_unit_none__,
-            target = ::core::module_path!(),
-            level = $crate::Level::INFO;
-            $($input)*
-        )
-    };
-}
-
 #[doc(hidden)]
 #[macro_export]
 ///Internal macro to register metric description when provided by metric creation macro
@@ -297,35 +194,29 @@ macro_rules! __register_metric {
     }};
 }
 
-/// Registers a gauge.
+/// Registers a counter.
 ///
-/// Gauges represent a single value that can go up or down over time, and always starts out with an
-/// initial value of zero.
+/// Counters represent a single monotonic value, which means the value can only be incremented, not decremented, and
+/// always starts out with an initial value of zero.
 ///
-/// Metrics can be registered, which provides a handle to directly update that metric.  For gauges,
-/// [`Gauge`](crate::Gauge) is provided which can be incremented, decrement, or set to an absolute value.
-///
-/// Metric names are shown below using string literals, but they can also be owned `String` values,
-/// which includes using macros such as `format!` directly at the callsite. String literals are
-/// preferred for performance where possible.
+/// A handle to the counter -- [`Counter`](crate::Counter) -- is returned by this macro and can be held on to in order
+/// to amortize the cost of registration.
 ///
 /// # Usage
 ///
-/// `[opt: value,] <$name,> [$labels,]`
+/// `counter!([named_param: value,] <$name,> [$labels,])`
 ///
-/// Only `$name` is required to initialize metrics.
+/// Only a name is required to initialize a counter.
 ///
-/// All `opt`s MUST be specified before `$name` while `$labels` parameter block always go after `$name`
-///
-/// Following is brief explanation of parameters
+/// Named parameters must always come before the counter name, and the counter name must come before any labels.
 ///
 /// ## Required parameters
 ///
-/// - `$name` - Name of the metric. Must be a string literal or an expression that results in `String` or `&'static str`.
+/// - `$name` - Name of the counter. Must be a string literal or an expression that results in `String` or `&'static str`.
 ///
-/// ## Optional Parameters
+/// ## Named Parameters
 ///
-/// The following parameters can be provided in any order:
+/// The following parameters can be provided in any order relative to other named parameters:
 ///
 /// - `target:` - Module path of the counter. Defaults to `::core::module_path!()`.
 /// - `level:` - Verbosity level of the counter. Defaults to `INFO`.
@@ -335,9 +226,108 @@ macro_rules! __register_metric {
 /// ## Labels
 ///
 /// Labels can be passed as _one_ of following:
+///
 /// - Arbitrary number of `<key> => <value>` where `key` and `value` can be a string literal or an expression that results in `String` or `&'static str`.
-/// - Static reference to collection of **Label**
-/// - Collection/iterator that implements [IntoLabels](trait.IntoLabels.html)
+/// - Static reference to collection of **Label**.
+/// - Collection/iterator that implements [IntoLabels](trait.IntoLabels.html).
+///
+/// # Example
+/// ```
+/// # #![no_implicit_prelude]
+/// # use ::std::convert::From;
+/// # use ::std::format;
+/// # use ::std::string::String;
+/// # use metrics::counter;
+/// # fn main() {
+/// // A basic counter:
+/// let counter = counter!("some_metric_name");
+/// counter.increment(1);
+///
+/// // Specifying labels inline, including using constants for either the key or value:
+/// let counter = counter!("some_metric_name", "service" => "http");
+/// counter.absolute(42);
+///
+/// const SERVICE_LABEL: &'static str = "service";
+/// const SERVICE_HTTP: &'static str = "http";
+/// let counter = counter!("some_metric_name", SERVICE_LABEL => SERVICE_HTTP);
+/// counter.increment(123);
+///
+/// // We can also pass labels by giving a vector or slice of key/value pairs.  In this scenario,
+/// // a unit or description can still be passed in their respective positions:
+/// let dynamic_val = "woo";
+/// let labels = [("dynamic_key", format!("{}!", dynamic_val))];
+/// let counter = counter!("some_metric_name", &labels);
+///
+/// // As mentioned in the documentation, metric names also can be owned strings, including ones
+/// // generated at the callsite via things like `format!`:
+/// let name = String::from("some_owned_metric_name");
+/// let counter = counter!(name);
+///
+/// let counter = counter!(format!("{}_via_format", "name"));
+///
+/// // Using all of the above, we can customize the counter's description, unit, target, and level:
+/// let counter = counter!(
+///     description: "super counter",
+///     unit: metrics::Unit::Bytes,
+///     target: ::core::module_path!(),
+///     level: metrics::Level::INFO,
+///     "super_counter",
+///     "label1" => "value1",
+///     "label2" => "value2"
+/// );
+/// # }
+/// ```
+#[macro_export]
+macro_rules! counter {
+    ($($input:tt)*) => {
+        $crate::__register_metric!(
+            describe_counter,
+            register_counter,
+            description = __internal_metric_description_none__,
+            unit = __internal_metric_unit_none__,
+            target = ::core::module_path!(),
+            level = $crate::Level::INFO;
+            $($input)*
+        )
+    };
+}
+
+/// Registers a gauge.
+///
+/// Gauges represent a single value that can go up or down over time, and always starts out with an initial value of
+/// zero.
+///
+/// A handle to the gauge -- [`Gauge`](crate::Gauge) -- is returned by this macro and can be held on to in order to
+/// amortize the cost of registration.
+///
+/// # Usage
+///
+/// `gauge!([named_param: value,] <$name,> [$labels,])`
+///
+/// Only a name is required to initialize a gauge.
+///
+/// Named parameters must always come before the gauge name, and the gauge name must come before any labels.
+///
+/// ## Required parameters
+///
+/// - `$name` - Name of the gauge. Must be a string literal or an expression that results in `String` or `&'static str`.
+///
+/// ## Named Parameters
+///
+/// The following parameters can be provided in any order relative to other named parameters:
+///
+/// - `target:` - Module path of the gauge. Defaults to `::core::module_path!()`.
+/// - `level:` - Verbosity level of the gauge. Defaults to `INFO`.
+/// - `description:` - Description of the gauge. If specified, `$name` will be used twice.
+/// - `unit:` - Unit of measurement of the gauge. Description must be provided in order to specify units.
+///
+/// ## Labels
+///
+/// Labels can be passed as _one_ of following:
+///
+/// - Arbitrary number of `<key> => <value>` where `key` and `value` can be a string literal or an expression that results in `String` or `&'static str`.
+/// - Static reference to collection of **Label**.
+/// - Collection/iterator that implements [IntoLabels](trait.IntoLabels.html).
 ///
 /// # Example
 /// ```
@@ -373,7 +363,8 @@ macro_rules! __register_metric {
 /// let gauge = gauge!(name);
 ///
 /// let gauge = gauge!(format!("{}_via_format", "name"));
-/// // Full gauge customization example
+///
+/// // Using all of the above, we can customize the gauge's description, unit, target, and level:
 /// let gauge = gauge!(
 ///     description: "super gauge",
 ///     unit: metrics::Unit::Bytes,
@@ -402,45 +393,39 @@ macro_rules! gauge {
 
 /// Registers a histogram.
 ///
-/// Histograms measure the distribution of values for a given set of measurements, and start with no
-/// initial values.
+/// Histograms measure the distribution of values for a given set of measurements, and start with no initial values.
 ///
-/// Metrics can be registered, which provides a handle to directly update that metric.  For
-/// histograms, [`Histogram`](crate::Histogram) is provided which can record values.
-///
-/// Metric names are shown below using string literals, but they can also be owned `String` values,
-/// which includes using macros such as `format!` directly at the callsite. String literals are
-/// preferred for performance where possible.
+/// A handle to the histogram -- [`Histogram`](crate::Histogram) -- is returned by this macro and can be held on to in
+/// order to amortize the cost of registration.
 ///
 /// # Usage
 ///
-/// `[opt: value,] <$name,> [$labels,]`
+/// `histogram!([named_param: value,] <$name,> [$labels,])`
 ///
-/// Only `$name` is required to initialize metrics.
+/// Only a name is required to initialize a histogram.
 ///
-/// All `opt`s MUST be specified before `$name` while `$labels` parameter block always go after `$name`
-///
-/// Following is brief explanation of parameters
+/// Named parameters must always come before the histogram name, and the histogram name must come before any labels.
 ///
 /// ## Required parameters
 ///
-/// - `$name` - Name of the metric. Must be a string literal or an expression that results in `String` or `&'static str`.
+/// - `$name` - Name of the histogram. Must be a string literal or an expression that results in `String` or `&'static str`.
 ///
-/// ## Optional Parameters
+/// ## Named Parameters
 ///
-/// The following parameters can be provided in any order:
+/// The following parameters can be provided in any order relative to other named parameters:
 ///
-/// - `target:` - Module path of the counter. Defaults to `::core::module_path!()`.
-/// - `level:` - Verbosity level of the counter. Defaults to `INFO`.
-/// - `description:` - Description of the counter. If specified, `$name` will be used twice.
-/// - `unit:` - Unit of measurement of the counter. Description must be provided in order to specify units.
+/// - `target:` - Module path of the histogram. Defaults to `::core::module_path!()`.
+/// - `level:` - Verbosity level of the histogram. Defaults to `INFO`.
+/// - `description:` - Description of the histogram. If specified, `$name` will be used twice.
+/// - `unit:` - Unit of measurement of the histogram. Description must be provided in order to specify units.
 ///
 /// ## Labels
 ///
 /// Labels can be passed as _one_ of following:
+///
 /// - Arbitrary number of `<key> => <value>` where `key` and `value` can be a string literal or an expression that results in `String` or `&'static str`.
-/// - Static reference to collection of **Label**
-/// - Collection/iterator that implements [IntoLabels](trait.IntoLabels.html)
+/// - Static reference to collection of **Label**.
+/// - Collection/iterator that implements [IntoLabels](trait.IntoLabels.html).
 ///
 /// # Example
 /// ```
@@ -473,13 +458,14 @@ macro_rules! gauge {
 /// let histogram = histogram!(name);
 ///
 /// let histogram = histogram!(format!("{}_via_format", "name"));
-/// // Full histogram customization example
+///
+/// // Using all of the above, we can customize the histogram's description, unit, target, and level:
 /// let histogram = histogram!(
-///     description: "super counter",
+///     description: "super histogram",
 ///     unit: metrics::Unit::Bytes,
 ///     target: ::core::module_path!(),
 ///     level: metrics::Level::INFO,
-///     "super_counter",
+///     "super_histogram",
 ///     "label1" => "value1",
 ///     "label2" => "value2"
 /// );
@@ -525,16 +511,12 @@ macro_rules! describe {
 
 /// Describes a counter.
 ///
-/// Counters represent a single monotonic value, which means the value can only be incremented, not
-/// decremented, and always starts out with an initial value of zero.
+/// Counters represent a single monotonic value, which means the value can only be incremented, not decremented, and
+/// always starts out with an initial value of zero.
 ///
-/// Metrics can be described with a free-form string, and optionally, a unit can be provided to
-/// describe the value and/or rate of the metric measurements.  Whether or not the installed
-/// recorder does anything with the description, or optional unit, is implementation defined.
-///
-/// Metric names are shown below using string literals, but they can also be owned `String` values,
-/// which includes using macros such as `format!` directly at the callsite. String literals are
-/// preferred for performance where possible.
+/// Counters can be described with a free-form string, and optionally, a unit can be provided to describe the value
+/// and/or rate of the measurements. Whether or not the installed recorder does anything with the description, or
+/// optional unit, is implementation defined.
 ///
 /// # Example
 /// ```
@@ -574,13 +556,9 @@ macro_rules! describe_counter {
 /// Gauges represent a single value that can go up or down over time, and always starts out with an
 /// initial value of zero.
 ///
-/// Metrics can be described with a free-form string, and optionally, a unit can be provided to
-/// describe the value and/or rate of the metric measurements.  Whether or not the installed
-/// recorder does anything with the description, or optional unit, is implementation defined.
-///
-/// Metric names are shown below using string literals, but they can also be owned `String` values,
-/// which includes using macros such as `format!` directly at the callsite. String literals are
-/// preferred for performance where possible.
+/// Gauges can be described with a free-form string, and optionally, a unit can be provided to describe the value
+/// and/or rate of the measurements. Whether or not the installed recorder does anything with the description, or
+/// optional unit, is implementation defined.
 ///
 /// # Example
 /// ```
@@ -620,13 +598,9 @@ macro_rules! describe_gauge {
 /// Histograms measure the distribution of values for a given set of measurements, and start with no
 /// initial values.
 ///
-/// Metrics can be described with a free-form string, and optionally, a unit can be provided to
-/// describe the value and/or rate of the metric measurements.  Whether or not the installed
-/// recorder does anything with the description, or optional unit, is implementation defined.
-///
-/// Metric names are shown below using string literals, but they can also be owned `String` values,
-/// which includes using macros such as `format!` directly at the callsite. String literals are
-/// preferred for performance where possible.
+/// Histograms can be described with a free-form string, and optionally, a unit can be provided to describe the value
+/// and/or rate of the measurements. Whether or not the installed recorder does anything with the description, or
+/// optional unit, is implementation defined.
 ///
 /// # Example
 /// ```

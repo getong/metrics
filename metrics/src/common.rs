@@ -21,12 +21,21 @@ pub type SharedString = Cow<'static, str>;
 ///
 /// Deprecated in favor of a no-hash based implementation in `metrics-util::common::KeyHasher`.
 ///
-/// Currently uses rapidhash - <https://github.com/hoxxep/rapidhash>
-///
-/// For any use-case within a `metrics`-owned or adjacent crate, where hashing of a
-/// [`Key`][crate::Key] is required, this is the hasher that will be used.
+/// This hasher operates in two modes. When only `write_u64` is called — the path taken by
+/// [`Key`][crate::Key]'s [`Hash`][std::hash::Hash] impl, which writes the pre-computed key hash
+/// via `write_u64(self.hash)` — `finish` returns that value verbatim, matching `Hashable::hashable(&key)`
+/// and the no-op `metrics_util::common::KeyHasher`. When arbitrary bytes are written via `write`
+/// (or any of the typed `write_*` methods that route through `write`), this hasher falls back to
+/// hashing with rapidhash - <https://github.com/hoxxep/rapidhash> - preserving the previous
+/// byte-hashing behavior for callers like `metrics_util::DefaultHashable<H>` in `metrics-util 0.19.x`.
 #[deprecated(since = "0.24.4", note = "Use `metrics-util::common::KeyHasher` instead.")]
-pub struct KeyHasher(RapidHasher<'static>);
+pub struct KeyHasher(KeyHasherState);
+
+enum KeyHasherState {
+    Empty,
+    PreHashed(u64),
+    Bytes(RapidHasher<'static>),
+}
 
 #[allow(deprecated)]
 impl std::fmt::Debug for KeyHasher {
@@ -38,20 +47,47 @@ impl std::fmt::Debug for KeyHasher {
 #[allow(deprecated)]
 impl Default for KeyHasher {
     fn default() -> Self {
-        // The seed should be randomized on application start if DoS resistance is required, but
-        // ahash was also previously using fixed seeds by default.
-        KeyHasher(RapidHasher::default_const())
+        KeyHasher(KeyHasherState::Empty)
     }
 }
 
 #[allow(deprecated)]
 impl Hasher for KeyHasher {
     fn finish(&self) -> u64 {
-        self.0.finish()
+        match &self.0 {
+            KeyHasherState::Empty => 0,
+            KeyHasherState::PreHashed(h) => *h,
+            KeyHasherState::Bytes(h) => h.finish(),
+        }
     }
 
     fn write(&mut self, bytes: &[u8]) {
-        self.0.write(bytes)
+        // Any byte write transitions to byte mode. If a prior `write_u64` had stored a
+        // pre-hashed value, fold it into the byte hasher first so multi-write hashing
+        // remains well-defined and deterministic.
+        let mut hasher = match std::mem::replace(&mut self.0, KeyHasherState::Empty) {
+            KeyHasherState::Empty => RapidHasher::default_const(),
+            KeyHasherState::PreHashed(prior) => {
+                let mut h = RapidHasher::default_const();
+                h.write_u64(prior);
+                h
+            }
+            KeyHasherState::Bytes(h) => h,
+        };
+        hasher.write(bytes);
+        self.0 = KeyHasherState::Bytes(hasher);
+    }
+
+    fn write_u64(&mut self, i: u64) {
+        // The pre-hashed fast path: store the value directly so `finish` returns it verbatim.
+        // If we've already transitioned to byte mode, stay there.
+        self.0 = match std::mem::replace(&mut self.0, KeyHasherState::Empty) {
+            KeyHasherState::Empty | KeyHasherState::PreHashed(_) => KeyHasherState::PreHashed(i),
+            KeyHasherState::Bytes(mut h) => {
+                h.write_u64(i);
+                KeyHasherState::Bytes(h)
+            }
+        };
     }
 }
 

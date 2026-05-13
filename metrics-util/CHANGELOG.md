@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - ReleaseDate
 
+### Fixed
+
+- Tightened the `metrics` dependency constraint to `^0.24.6` so that consumers of `metrics-util`
+  resolve a fixed `metrics`. The `metrics 0.24.6` release fixes a duplicate-entry regression in
+  `metrics::KeyHasher` that affected `metrics_util::registry::Registry` in versions 0.19.0
+  through 0.20.1. `metrics-util 0.20.2+` carries its own no-op `KeyHasher` and is unaffected
+  by `metrics::KeyHasher`'s behavior, but the dep bump documents the intended pairing.
+  ([#694](https://github.com/metrics-rs/metrics/issues/694))
+
 ## [0.20.3] - 2026-04-30
 
 ### Fixed

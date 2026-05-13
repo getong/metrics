@@ -346,9 +346,11 @@ impl Ord for Key {
 impl Hash for Key {
     #[inline]
     fn hash<H: Hasher>(&self, state: &mut H) {
-        // Write the pre-computed hash directly. This is designed to work with `KeyHasher`,
-        // a no-op hasher that simply returns the u64 written to it. For other hashers,
-        // this will re-hash the pre-computed value.
+        // MUST only call `write_u64(self.hash)`. The companion no-op `metrics_util::common::KeyHasher`
+        // (and the no-op fast path in the deprecated `metrics::KeyHasher`) depend on this being the
+        // sole write call — any byte write would route through a byte hasher and produce a value
+        // that disagrees with `Key::get_hash()` / `Hashable::hashable(&key)`, causing duplicate
+        // entries in `metrics_util::registry::Registry`'s internal HashMap after resize (#694).
         state.write_u64(self.hash)
     }
 }
@@ -622,5 +624,41 @@ mod tests {
         assert_eq!(key, retained);
         assert_eq!(key.get_hash(), retained.get_hash());
         assert_eq!(retained, retained.clone());
+    }
+
+    #[test]
+    fn test_buildhasherdefault_keyhasher_agrees_with_get_hash() {
+        use std::hash::{BuildHasher, BuildHasherDefault};
+        #[allow(deprecated)]
+        use crate::KeyHasher;
+
+        // The Registry in `metrics-util` versions 0.19.0..=0.20.1 uses
+        // `BuildHasherDefault<metrics::KeyHasher>` as the HashMap's BuildHasher, while looking
+        // up entries via `Hashable::hashable(&key)` (which returns `Key::get_hash()` directly).
+        // If those two paths produce different u64s, hashbrown's resize-time rebucketing places
+        // entries at a different bucket than the lookup queries, and the Registry inserts a
+        // fresh entry on every call. See https://github.com/metrics-rs/metrics/issues/694.
+        let key = Key::from_parts("regression", vec![Label::new("a", "1")]);
+        #[allow(deprecated)]
+        let via_buildhasher = BuildHasherDefault::<KeyHasher>::default().hash_one(&key);
+        assert_eq!(via_buildhasher, key.get_hash());
+    }
+
+    #[test]
+    fn test_keyhasher_byte_mode_distinguishes_inputs() {
+        use std::hash::{BuildHasher, BuildHasherDefault};
+        #[allow(deprecated)]
+        use crate::KeyHasher;
+
+        // Validates the byte-mode fallback path used by `metrics_util::DefaultHashable<H>` in
+        // `metrics-util 0.19.x`: when `Hash::hash` writes bytes (not just `write_u64`), the
+        // hasher must still produce deterministic, input-distinguishing output.
+        #[allow(deprecated)]
+        let bh = BuildHasherDefault::<KeyHasher>::default();
+        let h_foo_1 = bh.hash_one("foo");
+        let h_foo_2 = bh.hash_one("foo");
+        let h_bar = bh.hash_one("bar");
+        assert_eq!(h_foo_1, h_foo_2);
+        assert_ne!(h_foo_1, h_bar);
     }
 }

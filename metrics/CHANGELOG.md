@@ -8,6 +8,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - ReleaseDate
 
+### Fixed
+
+- Fixed a regression in the deprecated `metrics::KeyHasher` that caused
+  `metrics_util::registry::Registry` (versions 0.19.0 through 0.20.1) to insert a fresh entry
+  on every `get_or_create_counter`/`get_or_create_gauge`/`get_or_create_histogram` call for the
+  same `Key` after the internal HashMap resized. `KeyHasher` was treating the pre-computed
+  hash that `Key::hash` writes via `write_u64` as bytes to be hashed again, so
+  `BuildHasherDefault<KeyHasher>::hash_one(&key)` (used by hashbrown during resize) disagreed
+  with `Hashable::hashable(&key)` (used by the Registry for lookups). `KeyHasher` now returns
+  the pre-hashed value passed via `write_u64` verbatim, falling back to byte hashing only when
+  arbitrary bytes are written (preserving behavior for `metrics_util::DefaultHashable<H>`).
+  ([#694](https://github.com/metrics-rs/metrics/issues/694))
+
 ## [0.24.5] - 2026-04-29
 
 ### Fixed

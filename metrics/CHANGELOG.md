@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - ReleaseDate
 
+### Added
+
+- Support for specifying `description` and `unit` as optional parameters in the `counter!`,
+  `gauge!`, and `histogram!` registration macros, allowing description and creation in a
+  single call. ([#691](https://github.com/metrics-rs/metrics/pull/691))
+
 ### Fixed
 
 - Fixed a regression in the deprecated `metrics::KeyHasher` that caused
